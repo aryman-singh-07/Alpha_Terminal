@@ -228,4 +228,4 @@ Aryman Singh
 
 💻 GitHub: https://github.com/aryman-singh-07
 
-🚀 Live App: 
+🚀 Live App: https://alphaterminal-aryman-07.streamlit.app/
