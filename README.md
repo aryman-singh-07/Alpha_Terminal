@@ -186,10 +186,13 @@ Investor wants coins where “big money is flowing” (high trading volume).
 https://github.com/aryman-singh-07/Crypto-Dashboard.git
 cd Crypto-Dashboard
 pip install -r requirements.txt
+# 1) Start the snapshot logger (runs every 15 minutes)
+python logger.py --source coingecko --per_page 200 --every_minutes 15
+# 2) In a new terminal, run the Streamlit app
 streamlit run app.py
 
-📁 Project Structure
 
+📁 Project Structure
 Crypto-Dashboard/
 │
 ├── app.py                      # Streamlit app (Blue-Black Trading UI)
@@ -205,17 +208,11 @@ Crypto-Dashboard/
 └── README.md
 
 📦 Requirements
-
 Python 3.9+
-
 streamlit
-
 pandas
-
 numpy
-
 plotly
-
 openpyxl / xlsxwriter
 
 👤 Author
