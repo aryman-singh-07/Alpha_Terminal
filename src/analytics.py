@@ -4,7 +4,6 @@ from typing import List, Dict, Any
 import numpy as np
 import pandas as pd
 
-
 PRICE_BINS = [
     (0.0, 0.05, "$0 - $0.05"),
     (0.05, 0.5, "$0.05 - $0.5"),
@@ -14,31 +13,32 @@ PRICE_BINS = [
 ]
 
 
-def add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
+def add_derived_columns(df):
     out = df.copy()
-    for col in ["pct_1h", "pct_24h", "pct_7d"]:
-        out[col] = pd.to_numeric(out[col], errors="coerce")
-    out["price"] = pd.to_numeric(out["price"], errors="coerce")
 
-    out["prev_price_1h"] = out["price"] / (1.0 + (out["pct_1h"].fillna(0) / 100.0))
-    out["prev_price_7d"] = out["price"] / (1.0 + (out["pct_7d"].fillna(0) / 100.0))
-    out["prev_price_24h"] = out["price"] / (1.0 - (out["pct_24h"].abs().fillna(0) / 100.0))
+    column_map = {
+        "pct_1h": ["pct_1h", "Change_1h", "price_change_percentage_1h_in_currency"],
+        "pct_24h": ["pct_24h", "Change_24h", "price_change_percentage_24h"],
+        "pct_7d": ["pct_7d", "Change_7d", "price_change_percentage_7d_in_currency"],
+    }
 
-    out["avg_downfall_pct"] = out[["pct_1h", "pct_24h", "pct_7d"]].abs().mean(axis=1)
+    for standard_col, candidates in column_map.items():
+        found = None
+        for c in candidates:
+            if c in out.columns:
+                found = c
+                break
 
-    def bucket(p):
-        if pd.isna(p):
-            return None
-        for lo, hi, label in PRICE_BINS:
-            if lo <= p < hi:
-                return label
-        return None
+        if found:
+            out[standard_col] = pd.to_numeric(out[found], errors="coerce")
+        else:
+            out[standard_col] = 0.0
 
-    out["price_range"] = out["price"].apply(bucket)
-    out["price_category_0_50"] = np.where(out["price"] <= 50, "$0 - $50", ">$50")
-    out["price_category_10"] = np.where(out["price"] >= 10, ">= $10", "< $10")
+    out["avg_downfall"] = (
+        out["pct_1h"].abs() + out["pct_24h"].abs() + out["pct_7d"].abs()
+    ) / 3
+
     return out
-
 
 def filter_by_price_ranges(df: pd.DataFrame, selected_ranges: List[str]) -> pd.DataFrame:
     if not selected_ranges:
@@ -128,3 +128,40 @@ def pie_top5_volume_with_others(df: pd.DataFrame, price_cat: str) -> pd.DataFram
         rows.append({"coin_name": "Others", "volume_24h": float(others["volume_24h"].sum())})
 
     return pd.DataFrame(rows)
+
+def market_overview(df_latest: pd.DataFrame) -> dict:
+    df = df_latest.copy()
+    df["is_green_24h"] = df["pct_24h"].fillna(0) > 0
+    df["is_red_24h"] = df["pct_24h"].fillna(0) < 0
+
+    return {
+        "coins_tracked": int(len(df)),
+        "green_24h": int(df["is_green_24h"].sum()),
+        "red_24h": int(df["is_red_24h"].sum()),
+        "total_mcap": float(df["market_cap"].fillna(0).sum()),
+        "total_volume_24h": float(df["volume_24h"].fillna(0).sum()),
+        "avg_change_24h": float(df["pct_24h"].fillna(0).mean()),
+    }
+
+
+def top_movers(
+    df_latest: pd.DataFrame, metric: str, n: int = 10, ascending: bool = False
+) -> pd.DataFrame:
+    df = df_latest.copy()
+    df = df.dropna(subset=[metric])
+    df = df.sort_values(metric, ascending=ascending).head(n)
+    return df
+
+
+def top_volume(df_latest: pd.DataFrame, n: int = 10) -> pd.DataFrame:
+    df = df_latest.copy()
+    df = df.dropna(subset=["volume_24h"])
+    df = df.sort_values("volume_24h", ascending=False).head(n)
+    return df
+
+
+def coin_history(df_hist: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    df = df_hist[df_hist["coin_symbol"].str.upper() == symbol.upper()].copy()
+    df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+    df = df.dropna(subset=["ts"]).sort_values("ts")
+    return df

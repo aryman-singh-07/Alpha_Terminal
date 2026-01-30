@@ -1,25 +1,23 @@
 from __future__ import annotations
 
-import pandas as pd
 import requests
+import pandas as pd
 from dataclasses import dataclass
-from typing import Literal
-from bs4 import BeautifulSoup
+import time
+import requests
 
-
-USER_AGENT = "Mozilla/5.0 (CryptoDashboard; +https://streamlit.io)"
+USER_AGENT = "Mozilla/5.0 (AlphaTerminal; +https://streamlit.io)"
 
 
 @dataclass
 class FetchConfig:
-    source: Literal["coingecko", "coinmarketcap_scrape"] = "coingecko"
     vs_currency: str = "usd"
     per_page: int = 200
     page: int = 1
     timeout: int = 30
 
 
-def fetch_coingecko_markets(cfg: FetchConfig) -> pd.DataFrame:
+def fetch_coingecko_markets(cfg):
     url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
         "vs_currency": cfg.vs_currency,
@@ -29,49 +27,26 @@ def fetch_coingecko_markets(cfg: FetchConfig) -> pd.DataFrame:
         "sparkline": "false",
         "price_change_percentage": "1h,24h,7d",
     }
-    headers = {"User-Agent": USER_AGENT}
-    r = requests.get(url, params=params, headers=headers, timeout=cfg.timeout)
+
+    headers = {"User-Agent": "AlphaTerminal/1.0"}
+    r = requests.get(url, params=params, headers=headers, timeout=20)
     r.raise_for_status()
+
     data = r.json()
     df = pd.DataFrame(data)
 
-    out = pd.DataFrame({
-        "coin_name": df.get("name"),
-        "coin_symbol": df.get("symbol").str.upper(),
-        "price": df.get("current_price").astype(float),
-        "pct_1h": df.get("price_change_percentage_1h_in_currency").astype(float),
-        "pct_24h": df.get("price_change_percentage_24h_in_currency").astype(float),
-        "pct_7d": df.get("price_change_percentage_7d_in_currency").astype(float),
-        "volume_24h": df.get("total_volume").astype(float),
-        "market_cap": df.get("market_cap").astype(float),
-        "circulating_supply": df.get("circulating_supply").astype(float),
-        "last_updated": df.get("last_updated"),
-        "id": df.get("id"),
-    })
-    return out
+    return pd.DataFrame(
+        {
+            "coin_name": df["name"],
+            "coin_symbol": df["symbol"].str.upper(),
+            "price": df["current_price"],
+            "pct_1h": df["price_change_percentage_1h_in_currency"],
+            "pct_24h": df["price_change_percentage_24h_in_currency"],
+            "pct_7d": df["price_change_percentage_7d_in_currency"],
+            "volume_24h": df["total_volume"],
+            "market_cap": df["market_cap"],
+            "circulating_supply": df["circulating_supply"],
+            "last_updated": df["last_updated"],
+        }
+    )
 
-
-def fetch_coinmarketcap_scrape(limit: int = 200, timeout: int = 30) -> pd.DataFrame:
-    url = "https://coinmarketcap.com/"
-    headers = {"User-Agent": USER_AGENT}
-    r = requests.get(url, headers=headers, timeout=timeout)
-    r.raise_for_status()
-
-    soup = BeautifulSoup(r.text, "lxml")
-    rows = soup.select("table tbody tr")
-    records = []
-    for tr in rows[:limit]:
-        txt = tr.get_text(" ", strip=True)
-        if txt:
-            records.append({"raw": txt})
-
-    df = pd.DataFrame(records)
-    if df.empty:
-        raise RuntimeError("CoinMarketCap HTML did not contain the coins table (likely JS-rendered). Use CoinGecko source.")
-    return df
-
-
-def fetch_markets(cfg: FetchConfig) -> pd.DataFrame:
-    if cfg.source == "coinmarketcap_scrape":
-        return fetch_coinmarketcap_scrape(limit=cfg.per_page, timeout=cfg.timeout)
-    return fetch_coingecko_markets(cfg)
